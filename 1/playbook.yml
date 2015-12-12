@@ -1,0 +1,44 @@
+---
+- hosts: devops
+  vars:
+   memcache_size: 1024
+  tasks:
+   - name: Install epel-release
+     yum: name=epel-release state=installed
+   - name: Install apache httpd
+     yum: name=httpd state=installed
+     notify: 
+      - start httpd
+   - name: Install mariadb
+     yum: name=mariadb state=installed 
+     notify:
+      - start db server
+   - name: Install memcached
+     yum: name=memcached state=installed
+     notify:
+      - start memcached
+   - name: Config memcahed
+     template: src=memcached.conf.j2 dest=/etc/sysconfig/memcached mode=0640 owner=root group=root
+     notify:
+      - restart memcached
+   - name: Install php and php modules
+     yum: name={{ item }} state=installed
+     with_items:
+      - php
+      - php-mysql
+      - php-gd
+      - php-soap
+     notify:
+      - restart httpd
+
+  handlers:
+   - name: start httpd
+     service: name=httpd state=started enabled=true
+   - name: restart httpd
+     service: name=httpd state=restarted
+   - name: start db server
+     service: name=mariadb state=started enabled=true
+   - name: start memcached
+     service: name=memcached state=started enabled=true
+   - name: restart memcached
+     service: name=memcached state=restarted
