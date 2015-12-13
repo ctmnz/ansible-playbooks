@@ -1,0 +1,90 @@
+---
+- hosts: devops
+  vars:
+   memcache_size: 1024
+   wp_db_user: wpuser
+   wp_db_pass: wppass
+   wp_db_name: wp
+   mysql_root_password: mysqlrootpass
+   mysql_port: 3306
+   wp_github_repo: https://github.com/WordPress/WordPress.git
+
+
+  tasks:
+   - name: Disable selinux
+     selinux: state=disabled
+
+   - name: Install epel-release and other common progz
+     yum: name={{ item }} state=installed
+     with_items:
+      - epel-release
+      - vim
+      - git
+
+   - name: Install mariadb
+     yum: name={{ item }} state=installed
+     with_items:
+      - mariadb
+      - mariadb-server
+      - MySQL-python
+      - libselinux-python
+      - libsemanage-python
+     notify:
+      - start mariadb
+
+   - name: Configure Mariadb
+     template: src=my.cnf.j2 dest=/etc/my.cnf
+     notify:
+      - restart mariadb
+
+   - name: Create application db
+     mysql_db: name={{ wp_db_name }} state=present
+
+   - name: Create application user
+     mysql_user: name={{ wp_db_user }} password={{ wp_db_pass }} priv=*.*:ALL host="localhost" state=present
+
+   - name: Install apache httpd
+     yum: name=httpd state=installed
+     notify: 
+      - start httpd
+
+   - name: Install memcached
+     yum: name=memcached state=installed
+     notify:
+      - start memcached
+
+   - name: Config memcahed
+     template: src=memcached.conf.j2 dest=/etc/sysconfig/memcached mode=0640 owner=root group=root
+     notify:
+      - start memcached
+
+   - name: Install php and php modules
+     yum: name={{ item }} state=installed
+     with_items:
+      - php
+      - php-mysql
+      - php-gd
+      - php-soap
+     notify:
+      - restart httpd
+
+   - name: git clone wordpress from github repo
+     git: repo={{ wp_github_repo }} dest=/var/www/html version=HEAD
+
+   - name: change ownership of wp files
+     file: path=/var/www/html state=directory recurse=yes owner=apache group=apache mode=0774 
+
+  handlers:
+   - name: start httpd
+     service: name=httpd state=started enabled=yes
+   - name: restart httpd
+     service: name=httpd state=restarted
+   - name: start mariadb
+     service: name=mariadb state=started enabled=yes
+   - name: start memcached
+     service: name=memcached state=started enabled=yes
+   - name: restart memcached
+     service: name=memcached state=restarted
+   - name: restart mariadb
+     service: name=mariadb state=restarted
+
